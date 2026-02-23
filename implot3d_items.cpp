@@ -537,8 +537,9 @@ template <class _Getter> struct RendererLineSegments : RendererBase {
     mutable ImVec2 UV1;
 };
 
-template <class _Getter> struct RendererTriangleFill : RendererBase {
-    RendererTriangleFill(const _Getter& getter, ImU32 col) : RendererBase(getter.Count / 3, 3, 3), Getter(getter), Col(col) {}
+template <class _Getter, class _ColorGetter> struct RendererTriangleFill : RendererBase {
+    RendererTriangleFill(const _Getter& getter, const _ColorGetter& col_getter)
+        : RendererBase(getter.Count / 3, 3, 3), Getter(getter), ColGetter(col_getter) {}
 
     void Init(ImDrawList3D& draw_list_3d) const { UV = draw_list_3d._SharedData->TexUvWhitePixel; }
 
@@ -562,15 +563,15 @@ template <class _Getter> struct RendererTriangleFill : RendererBase {
         draw_list_3d._VtxWritePtr[0].pos.x = p[0].x;
         draw_list_3d._VtxWritePtr[0].pos.y = p[0].y;
         draw_list_3d._VtxWritePtr[0].uv = UV;
-        draw_list_3d._VtxWritePtr[0].col = Col;
+        draw_list_3d._VtxWritePtr[0].col = ColGetter(3 * prim);
         draw_list_3d._VtxWritePtr[1].pos.x = p[1].x;
         draw_list_3d._VtxWritePtr[1].pos.y = p[1].y;
         draw_list_3d._VtxWritePtr[1].uv = UV;
-        draw_list_3d._VtxWritePtr[1].col = Col;
+        draw_list_3d._VtxWritePtr[1].col = ColGetter(3 * prim + 1);
         draw_list_3d._VtxWritePtr[2].pos.x = p[2].x;
         draw_list_3d._VtxWritePtr[2].pos.y = p[2].y;
         draw_list_3d._VtxWritePtr[2].uv = UV;
-        draw_list_3d._VtxWritePtr[2].col = Col;
+        draw_list_3d._VtxWritePtr[2].col = ColGetter(3 * prim + 2);
         draw_list_3d._VtxWritePtr += 3;
 
         // 3 indices per triangle
@@ -589,12 +590,13 @@ template <class _Getter> struct RendererTriangleFill : RendererBase {
     }
 
     const _Getter& Getter;
+    const _ColorGetter& ColGetter;
     mutable ImVec2 UV;
-    const ImU32 Col;
 };
 
-template <class _Getter> struct RendererQuadFill : RendererBase {
-    RendererQuadFill(const _Getter& getter, ImU32 col) : RendererBase(getter.Count / 4, 6, 4), Getter(getter), Col(col) {}
+template <class _Getter, class _ColorGetter> struct RendererQuadFill : RendererBase {
+    RendererQuadFill(const _Getter& getter, const _ColorGetter& col_getter)
+        : RendererBase(getter.Count / 4, 6, 4), Getter(getter), ColGetter(col_getter) {}
 
     void Init(ImDrawList3D& draw_list_3d) const { UV = draw_list_3d._SharedData->TexUvWhitePixel; }
 
@@ -620,22 +622,22 @@ template <class _Getter> struct RendererQuadFill : RendererBase {
         draw_list_3d._VtxWritePtr[0].pos.x = p[0].x;
         draw_list_3d._VtxWritePtr[0].pos.y = p[0].y;
         draw_list_3d._VtxWritePtr[0].uv = UV;
-        draw_list_3d._VtxWritePtr[0].col = Col;
+        draw_list_3d._VtxWritePtr[0].col = ColGetter(4 * prim);
 
         draw_list_3d._VtxWritePtr[1].pos.x = p[1].x;
         draw_list_3d._VtxWritePtr[1].pos.y = p[1].y;
         draw_list_3d._VtxWritePtr[1].uv = UV;
-        draw_list_3d._VtxWritePtr[1].col = Col;
+        draw_list_3d._VtxWritePtr[1].col = ColGetter(4 * prim + 1);
 
         draw_list_3d._VtxWritePtr[2].pos.x = p[2].x;
         draw_list_3d._VtxWritePtr[2].pos.y = p[2].y;
         draw_list_3d._VtxWritePtr[2].uv = UV;
-        draw_list_3d._VtxWritePtr[2].col = Col;
+        draw_list_3d._VtxWritePtr[2].col = ColGetter(4 * prim + 2);
 
         draw_list_3d._VtxWritePtr[3].pos.x = p[3].x;
         draw_list_3d._VtxWritePtr[3].pos.y = p[3].y;
         draw_list_3d._VtxWritePtr[3].uv = UV;
-        draw_list_3d._VtxWritePtr[3].col = Col;
+        draw_list_3d._VtxWritePtr[3].col = ColGetter(4 * prim + 3);
 
         draw_list_3d._VtxWritePtr += 4;
 
@@ -663,8 +665,8 @@ template <class _Getter> struct RendererQuadFill : RendererBase {
     }
 
     const _Getter& Getter;
+    const _ColorGetter& ColGetter;
     mutable ImVec2 UV;
-    const ImU32 Col;
 };
 
 template <class _Getter> struct RendererQuadImage : RendererBase {
@@ -1000,6 +1002,35 @@ struct GetterMeshTriangles {
 };
 
 //-----------------------------------------------------------------------------
+// [SECTION] Color Getters
+//-----------------------------------------------------------------------------
+
+/// Color getter that returns the same ImU32 for every index (uniform color)
+struct ColGetterConst {
+    ColGetterConst(ImU32 col) : Col(col) {}
+    template <typename I> IMPLOT3D_INLINE ImU32 operator()(I) const { return Col; }
+    const ImU32 Col;
+};
+
+/// Color getter that wraps a flat ImU32 array (one color per vertex, indexed directly)
+struct ColGetterArray {
+    ColGetterArray(const ImU32* cols, int count) : Colors(cols), Count(count) {}
+    template <typename I> IMPLOT3D_INLINE ImU32 operator()(I idx) const { return Colors[idx]; }
+    const ImU32* Colors;
+    const int Count;
+};
+
+/// Color getter that dereferences through a mesh index buffer (mirrors GetterMeshTriangles)
+struct ColGetterMeshTriangles {
+    ColGetterMeshTriangles(const ImU32* vtx_cols, const unsigned int* idx, int idx_count)
+        : Colors(vtx_cols), Idx(idx), Count(idx_count) {}
+    template <typename I> IMPLOT3D_INLINE ImU32 operator()(I i) const { return Colors[Idx[i]]; }
+    const ImU32* Colors;
+    const unsigned int* Idx;
+    const int Count;
+};
+
+//-----------------------------------------------------------------------------
 // [SECTION] RenderPrimitives
 //-----------------------------------------------------------------------------
 
@@ -1032,6 +1063,32 @@ template <template <class> class _Renderer, class _Getter, typename... Args> voi
         if (!renderer.Render(draw_list_3d, cull_box, i))
             num_culled++;
     // Unreserve unused vertices and indices
+    draw_list_3d.PrimUnreserve(num_culled * renderer.IdxConsumed, num_culled * renderer.VtxConsumed);
+}
+
+/// Renders primitive shapes with per-vertex colors supplied by a color getter
+template <template <class, class> class _Renderer, class _Getter, class _ColorGetter, typename... Args>
+void RenderPrimitives(const _Getter& getter, const _ColorGetter& col_getter, Args... args) {
+    _Renderer<_Getter, _ColorGetter> renderer(getter, col_getter, args...);
+    ImPlot3DPlot& plot = *GetCurrentPlot();
+    ImDrawList3D& draw_list_3d = plot.DrawList;
+    ImPlot3DBox cull_box;
+    if (ImHasFlag(plot.Flags, ImPlot3DFlags_NoClip)) {
+        cull_box.Min = ImPlot3DPoint(-HUGE_VAL, -HUGE_VAL, -HUGE_VAL);
+        cull_box.Max = ImPlot3DPoint(HUGE_VAL, HUGE_VAL, HUGE_VAL);
+    } else {
+        cull_box.Min = plot.RangeMin();
+        cull_box.Max = plot.RangeMax();
+    }
+
+    unsigned int prims_to_render = ImMin(renderer.Prims, (ImDrawList3D::MaxIdx() - draw_list_3d._VtxCurrentIdx) / renderer.VtxConsumed);
+    draw_list_3d.PrimReserve(prims_to_render * renderer.IdxConsumed, prims_to_render * renderer.VtxConsumed);
+    renderer.Init(draw_list_3d);
+
+    int num_culled = 0;
+    for (unsigned int i = 0; i < prims_to_render; i++)
+        if (!renderer.Render(draw_list_3d, cull_box, i))
+            num_culled++;
     draw_list_3d.PrimUnreserve(num_culled * renderer.IdxConsumed, num_culled * renderer.VtxConsumed);
 }
 
@@ -1219,7 +1276,7 @@ template <typename _Getter> void PlotTriangleEx(const char* label_id, const _Get
         // Render fill
         if (getter.Count >= 3 && n.RenderFill && !ImHasFlag(spec.Flags, ImPlot3DTriangleFlags_NoFill)) {
             const ImU32 col_fill = ImGui::GetColorU32(s.FillColor);
-            RenderPrimitives<RendererTriangleFill>(getter, col_fill);
+            RenderPrimitives<RendererTriangleFill>(getter, ColGetterConst(col_fill));
         }
 
         // Render lines
@@ -1266,7 +1323,7 @@ template <typename _Getter> void PlotQuadEx(const char* label_id, const _Getter&
         // Render fill
         if (getter.Count >= 4 && n.RenderFill && !ImHasFlag(spec.Flags, ImPlot3DQuadFlags_NoFill)) {
             const ImU32 col_fill = ImGui::GetColorU32(s.FillColor);
-            RenderPrimitives<RendererQuadFill>(getter, col_fill);
+            RenderPrimitives<RendererQuadFill>(getter, ColGetterConst(col_fill));
         }
 
         // Render lines
@@ -1367,7 +1424,7 @@ void PlotMesh(const char* label_id, const ImPlot3DPoint* vtx, const unsigned int
         // Render fill
         if (getter.Count >= 3 && n.RenderFill && !ImHasFlag(spec.Flags, ImPlot3DMeshFlags_NoFill)) {
             const ImU32 col_fill = ImGui::GetColorU32(s.FillColor);
-            RenderPrimitives<RendererTriangleFill>(getter_triangles, col_fill);
+            RenderPrimitives<RendererTriangleFill>(getter_triangles, ColGetterConst(col_fill));
         }
 
         // Render lines
@@ -1377,6 +1434,35 @@ void PlotMesh(const char* label_id, const ImPlot3DPoint* vtx, const unsigned int
         }
 
         // Render markers
+        if (s.Marker != ImPlot3DMarker_None && !ImHasFlag(spec.Flags, ImPlot3DMeshFlags_NoMarkers)) {
+            const ImU32 col_line = ImGui::GetColorU32(s.MarkerLineColor);
+            const ImU32 col_fill = ImGui::GetColorU32(s.MarkerFillColor);
+            RenderMarkers(getter, s.Marker, s.MarkerSize, n.RenderMarkerFill, col_fill, n.RenderMarkerLine, col_line, s.LineWeight);
+        }
+
+        EndItem();
+    }
+}
+
+void PlotMesh(const char* label_id, const ImPlot3DPoint* vtx, const ImU32* vtx_colors, const unsigned int* idx, int vtx_count, int idx_count,
+              const ImPlot3DSpec& spec) {
+    Getter3DPoints getter(vtx, vtx_count);
+    GetterMeshTriangles getter_triangles(vtx, idx, idx_count);
+    ColGetterMeshTriangles col_getter(vtx_colors, idx, idx_count);
+
+    if (BeginItemEx(label_id, getter, spec, spec.FillColor, spec.Marker)) {
+        const ImPlot3DNextItemData& n = GetItemData();
+        const ImPlot3DSpec& s = n.Spec;
+
+        if (getter.Count >= 3 && n.RenderFill && !ImHasFlag(spec.Flags, ImPlot3DMeshFlags_NoFill)) {
+            RenderPrimitives<RendererTriangleFill>(getter_triangles, col_getter);
+        }
+
+        if (getter.Count >= 2 && n.RenderLine && !n.IsAutoLine && !ImHasFlag(spec.Flags, ImPlot3DMeshFlags_NoLines)) {
+            const ImU32 col_line = ImGui::GetColorU32(s.LineColor);
+            RenderPrimitives<RendererLineSegments>(GetterTriangleLines<GetterMeshTriangles>(getter_triangles), col_line, s.LineWeight);
+        }
+
         if (s.Marker != ImPlot3DMarker_None && !ImHasFlag(spec.Flags, ImPlot3DMeshFlags_NoMarkers)) {
             const ImU32 col_line = ImGui::GetColorU32(s.MarkerLineColor);
             const ImU32 col_fill = ImGui::GetColorU32(s.MarkerFillColor);

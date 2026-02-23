@@ -621,6 +621,10 @@ IMPLOT3D_TMP void PlotSurface(const char* label_id, const T* xs, const T* ys, co
 IMPLOT3D_API void PlotMesh(const char* label_id, const ImPlot3DPoint* vtx, const unsigned int* idx, int vtx_count, int idx_count,
                            const ImPlot3DSpec& spec = ImPlot3DSpec());
 
+// Plots a 3D mesh with per-vertex colors. vtx_colors must contain vtx_count ImU32 values (one per vertex, indexed by idx).
+IMPLOT3D_API void PlotMesh(const char* label_id, const ImPlot3DPoint* vtx, const ImU32* vtx_colors, const unsigned int* idx, int vtx_count,
+                           int idx_count, const ImPlot3DSpec& spec = ImPlot3DSpec());
+
 // Plots a rectangular image in 3D defined by its center and two direction vectors (axes).
 // #center is the center of the rectangle in plot coordinates.
 // #axis_u and #axis_v define the local axes and half-extents of the rectangle in 3D space.
